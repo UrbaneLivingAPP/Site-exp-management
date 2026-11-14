@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Interior Site Expense Manager</title>
+  <!-- Tailwind CSS & Chart.js & Icons -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
+    body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #f8fafc; }
+    .glass-card { background: #ffffff; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.03); }
+    .loader { border-top-color: #4f46e5; animation: spinner 0.8s linear infinite; }
+    @keyframes spinner { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+  </style>
+</head>
+<body class="text-slate-800 pb-12">
+
+  <!-- Loading Overlay -->
+  <div id="loaderOverlay" class="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 flex items-center justify-center">
+    <div class="bg-white p-5 rounded-2xl shadow-xl flex flex-col items-center">
+      <div class="loader ease-linear rounded-full border-4 border-t-4 border-slate-200 h-10 w-10 mb-3"></div>
+      <p class="text-sm font-semibold text-slate-700">Syncing Site Data...</p>
+    </div>
+  </div>
+
+  <!-- Top Navbar -->
+  <nav class="bg-slate-900 text-white sticky top-0 z-30 shadow-md">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="bg-indigo-500 p-2 rounded-lg">
+          <i class="fa-solid fa-couch text-white text-lg"></i>
+        </div>
+        <div>
+          <h1 class="font-bold text-lg leading-tight tracking-tight">SiteLedger <span class="text-indigo-400">Pro</span></h1>
+          <p class="text-[11px] text-slate-400">Home Interior Expense Tracker</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <button onclick="openSiteModal()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs sm:text-sm font-medium px-3 py-2 rounded-lg border border-slate-700 transition flex items-center gap-1.5">
+          <i class="fa-solid fa-plus"></i> <span class="hidden sm:inline">Add New Site</span><span class="sm:hidden">Site</span>
+        </button>
+        <button onclick="scrollToForm()" class="bg-indigo-600 hover:bg-indigo-500 text-white text-xs sm:text-sm font-semibold px-3.5 py-2 rounded-lg shadow-sm transition flex items-center gap-1.5">
+          <i class="fa-solid fa-receipt"></i> <span>+ Expense</span>
+        </button>
+      </div>
+    </div>
+  </nav>
+
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 space-y-6">
+
+    <!-- Site Filter Bar & KPI Cards -->
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
+      <div>
+        <label class="text-xs font-semibold uppercase tracking-wider text-slate-400 block mb-1">Select Active Client Site</label>
+        <select id="globalSiteFilter" onchange="renderDashboard()" class="w-full sm:w-72 bg-slate-50 border border-slate-300 text-slate-900 text-sm font-semibold rounded-xl focus:ring-indigo-500 focus:border-indigo-500 p-2.5">
+          <option value="ALL">🏢 All Client Sites (Company Overview)</option>
+        </select>
+      </div>
+      <div class="grid grid-cols-2 sm:flex gap-3 sm:gap-6">
+        <div class="bg-indigo-50/70 px-4 py-2.5 rounded-xl border border-indigo-100">
+          <p class="text-xs text-indigo-600 font-medium">Total Expense</p>
+          <p id="kpiTotal" class="text-xl sm:text-2xl font-bold text-slate-900">₹0</p>
+        </div>
+        <div class="bg-emerald-50/70 px-4 py-2.5 rounded-xl border border-emerald-100">
+          <p class="text-xs text-emerald-600 font-medium">Top Work Head</p>
+          <p id="kpiTopHead" class="text-sm sm:text-base font-bold text-slate-900 truncate max-w-[140px]">-</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main Grid: Add Form + Head Breakdown -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      
+      <!-- Left: Add Expense Form (5 cols) -->
+      <div id="expenseFormCard" class="lg:col-span-5 glass-card rounded-2xl p-5 sm:p-6">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-base font-bold text-slate-800 flex items-center gap-2">
+            <span class="w-2 h-6 bg-indigo-600 rounded-full"></span> Record Site Expense
+          </h2>
+          <span class="text-xs bg-slate-100 text-slate-600 px-2.5 py-1 rounded-md font-medium">Auto-Sync</span>
+        </div>
+
+        <form id="expenseForm" onsubmit="submitExpense(event)" class="space-y-4">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 mb-1">Date *</label>
+              <input type="date" id="expDate" required class="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 mb-1">Amount (₹) *</label>
+              <input type="number" id="expAmount" placeholder="e.g. 15000" min="1" step="any" required class="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 text-sm font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none">
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1">Client Site Name *</label>
+            <select id="expSite" required class="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 text-sm font-medium focus:ring-2 focus:ring-indigo-500 outline-none"></select>
+          </div>
+
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1">Major Work Head *</label>
+            <select id="expHead" required class="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 text-sm font-medium focus:ring-2 focus:ring-indigo-500 outline-none"></select>
+          </div>
+
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1">Material / Work Description *</label>
+            <input type="text" id="expDesc" placeholder="e.g. 19mm Marine Ply, Fevicol, Labour Advance" required class="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 mb-1">Vendor / Contractor</label>
+              <input type="text" id="expVendor" placeholder="e.g. Sharma Timber" class="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 mb-1">Payment Mode</label>
+              <select id="expMode" class="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+                <option value="UPI / Online">UPI / Online</option>
+                <option value="Cash">Cash</option>
+                <option value="Bank Transfer">Bank Transfer (NEFT/RTGS)</option>
+                <option value="Cheque">Cheque</option>
+              </select>
+            </div>
+          </div>
+
+          <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 rounded-xl shadow-md shadow-indigo-200 transition flex items-center justify-center gap-2 mt-2">
+            <i class="fa-solid fa-check-circle"></i> Save Expense Entry
+          </button>
+        </form>
+      </div>
+
+      <!-- Right: Major Head Wise Summary & Chart (7 cols) -->
+      <div class="lg:col-span-7 glass-card rounded-2xl p-5 sm:p-6 flex flex-col justify-between">
+        <div>
+          <h2 class="text-base font-bold text-slate-800 flex items-center gap-2 mb-4">
+            <span class="w-2 h-6 bg-emerald-500 rounded-full"></span> Major Head-Wise Breakdown
+          </h2>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
+            <!-- Chart -->
+            <div class="h-56 flex items-center justify-center">
+              <canvas id="headChart"></canvas>
+            </div>
+            <!-- Head Summary List -->
+            <div id="headSummaryList" class="space-y-2 max-h-60 overflow-y-auto pr-1">
+              <!-- Dynamic Head Cards -->
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bottom: Detailed Expense Ledger Table -->
+    <div class="glass-card rounded-2xl p-5 sm:p-6">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+        <h2 class="text-base font-bold text-slate-800 flex items-center gap-2">
+          <span class="w-2 h-6 bg-amber-500 rounded-full"></span> Expense Ledger History
+        </h2>
+        <div class="flex flex-wrap gap-2">
+          <select id="tableHeadFilter" onchange="renderTable()" class="bg-slate-50 border border-slate-300 text-xs font-medium rounded-lg px-3 py-2 outline-none">
+            <option value="ALL">All Work Heads</option>
+          </select>
+          <input type="text" id="searchInput" onkeyup="renderTable()" placeholder="Search item, vendor..." class="bg-slate-50 border border-slate-300 text-xs rounded-lg px-3 py-2 outline-none w-44 sm:w-56">
+        </div>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="w-full text-left border-collapse">
+          <thead>
+            <tr class="border-b border-slate-200 text-[11px] font-bold uppercase text-slate-400 bg-slate-50/50">
+              <th class="py-3 px-3">Date</th>
+              <th class="py-3 px-3">Client Site</th>
+              <th class="py-3 px-3">Major Head</th>
+              <th class="py-3 px-3">Description & Vendor</th>
+              <th class="py-3 px-3">Mode</th>
+              <th class="py-3 px-3 text-right">Amount</th>
+            </tr>
+          </thead>
+          <tbody id="expenseTableBody" class="divide-y divide-slate-100 text-sm">
+            <!-- Dynamic Rows -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+
+  <!-- Modal: Add New Client Site -->
+  <div id="siteModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-40 hidden items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl">
+      <div class="flex justify-between items-center mb-4">
+        <h3 class="text-lg font-bold text-slate-800">Add New Client Site</h3>
+        <button onclick="closeSiteModal()" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark text-lg"></i></button>
+      </div>
+      <p class="text-xs text-slate-500 mb-3">Naya project site add karein (e.g., Kapoor Residence - DLF Phase 5)</p>
+      <input type="text" id="newSiteInput" placeholder="Enter Client / Site Name" class="w-full bg-slate-50 border border-slate-300 rounded-xl p-3 text-sm mb-4 outline-none focus:ring-2 focus:ring-indigo-500">
+      <div class="flex justify-end gap-2">
+        <button onclick="closeSiteModal()" class="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-xl">Cancel</button>
+        <button onclick="saveNewSite()" class="px-5 py-2 text-sm font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl">Add Site</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let appData = { sites: [], heads: [], expenses: [] };
+    let chartInstance = null;
+
+    // Default aaj ki date set karein
+    document.getElementById('expDate').valueAsDate = new Date();
+
+    window.onload = function() {
+      google.script.run.withSuccessHandler(onDataLoaded).getInitialData();
+    };
+
+    function onDataLoaded(data) {
+      appData = data;
+      populateDropdowns();
+      renderDashboard();
+      document.getElementById('loaderOverlay').classList.add('hidden');
+    }
+
+    function populateDropdowns() {
+      const globalSite = document.getElementById('globalSiteFilter');
+      const expSite = document.getElementById('expSite');
+      const currentGlobal = globalSite.value;
+
+      globalSite.innerHTML = '<option value="ALL">🏢 All Client Sites (Company Overview)</option>';
+      expSite.innerHTML = '';
+
+      appData.sites.forEach(site => {
+        globalSite.innerHTML += `<option value="${site}">${site}</option>`;
+        expSite.innerHTML += `<option value="${site}">${site}</option>`;
+      });
+      if (appData.sites.includes(currentGlobal)) globalSite.value = currentGlobal;
+
+      const expHead = document.getElementById('expHead');
+      const tableHead = document.getElementById('tableHeadFilter');
+      expHead.innerHTML = '';
+      tableHead.innerHTML = '<option value="ALL">All Work Heads</option>';
+
+      appData.heads.forEach(head => {
+        expHead.innerHTML += `<option value="${head}">${head}</option>`;
+        tableHead.innerHTML += `<option value="${head}">${head}</option>`;
+      });
+    }
+
+    function renderDashboard() {
+      const selectedSite = document.getElementById('globalSiteFilter').value;
+      const filtered = selectedSite === 'ALL' 
+        ? appData.expenses 
+        : appData.expenses.filter(e => e.site === selectedSite);
+
+      // Total & Head-wise calculation
+      let total = 0;
+      const headTotals = {};
+
+      filtered.forEach(item => {
+        total += item.amount;
+        headTotals[item.head] = (headTotals[item.head] || 0) + item.amount;
+      });
+
+      document.getElementById('kpiTotal').innerText = '₹' + total.toLocaleString('en-IN');
+
+      // Sort heads by highest spend
+      const sortedHeads = Object.entries(headTotals).sort((a, b) => b[1] - a[1]);
+      document.getElementById('kpiTopHead').innerText = sortedHeads.length > 0 ? sortedHeads[0][0] : '-';
+
+      // Render Head Breakdown List
+      const listEl = document.getElementById('headSummaryList');
+      listEl.innerHTML = '';
+      
+      if (sortedHeads.length === 0) {
+        listEl.innerHTML = '<p class="text-xs text-slate-400 text-center py-8">No expenses recorded for this selection yet.</p>';
+      } else {
+        sortedHeads.forEach(([head, amt]) => {
+          const pct = total > 0 ? Math.round((amt / total) * 100) : 0;
+          listEl.innerHTML += `
+            <div class="p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+              <div class="flex justify-between text-xs font-semibold mb-1">
+                <span class="text-slate-700 truncate pr-2">${head}</span>
+                <span class="text-slate-900">₹${amt.toLocaleString('en-IN')} <span class="text-slate-400 font-normal">(${pct}%)</span></span>
+              </div>
+              <div class="w-full bg-slate-200 rounded-full h-1.5">
+                <div class="bg-indigo-600 h-1.5 rounded-full" style="width: ${pct}%"></div>
+              </div>
+            </div>`;
+        });
+      }
+
+      updateChart(sortedHeads);
+      renderTable();
+    }
+
+    function updateChart(sortedHeads) {
+      const ctx = document.getElementById('headChart').getContext('2d');
+      if (chartInstance) chartInstance.destroy();
+
+      const labels = sortedHeads.map(h => h[0]);
+      const values = sortedHeads.map(h => h[1]);
+      const colors = ['#4f46e5', '#10b981', '#f59e0b', '#ec4899', '#06b6d4', '#8b5cf6', '#f43f5e', '#64748b'];
+
+      chartInstance = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+          labels: labels,
+          datasets: [{
+            data: values,
+            backgroundColor: colors,
+            borderWidth: 2,
+            borderColor: '#ffffff'
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          cutout: '68%',
+          plugins: {
+            legend: { display: false }
+          }
+        }
+      });
+    }
+
+    function renderTable() {
+      const selectedSite = document.getElementById('globalSiteFilter').value;
+      const selectedHead = document.getElementById('tableHeadFilter').value;
+      const query = document.getElementById('searchInput').value.toLowerCase();
+
+      const filtered = appData.expenses.filter(e => {
+        const matchSite = selectedSite === 'ALL' || e.site === selectedSite;
+        const matchHead = selectedHead === 'ALL' || e.head === selectedHead;
+        const matchQuery = e.desc.toLowerCase().includes(query) || 
+                           (e.vendor && e.vendor.toLowerCase().includes(query)) ||
+                           e.site.toLowerCase().includes(query);
+        return matchSite && matchHead && matchQuery;
+      });
+
+      const tbody = document.getElementById('expenseTableBody');
+      tbody.innerHTML = '';
+
+      if (filtered.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="6" class="text-center py-8 text-slate-400 text-xs">No matching records found.</td></tr>`;
+        return;
+      }
+
+      filtered.forEach(item => {
+        tbody.innerHTML += `
+          <tr class="hover:bg-slate-50/80 transition">
+            <td class="py-3 px-3 text-xs text-slate-500 whitespace-nowrap">${item.date}</td>
+            <td class="py-3 px-3 font-semibold text-slate-800 text-xs">${item.site}</td>
+            <td class="py-3 px-3">
+              <span class="inline-block bg-indigo-50 text-indigo-700 text-[11px] font-semibold px-2.5 py-0.5 rounded-md border border-indigo-100">
+                ${item.head}
+              </span>
+            </td>
+            <td class="py-3 px-3">
+              <p class="text-xs font-medium text-slate-800">${item.desc}</p>
+              ${item.vendor ? `<p class="text-[11px] text-slate-400">Vendor: ${item.vendor}</p>` : ''}
+            </td>
+            <td class="py-3 px-3 text-xs text-slate-500">${item.mode}</td>
+            <td class="py-3 px-3 text-right font-bold text-slate-900 whitespace-nowrap">₹${item.amount.toLocaleString('en-IN')}</td>
+          </tr>`;
+      });
+    }
+
+    function submitExpense(e) {
+      e.preventDefault();
+      document.getElementById('loaderOverlay').classList.remove('hidden');
+
+      const payload = {
+        date: document.getElementById('expDate').value,
+        site: document.getElementById('expSite').value,
+        head: document.getElementById('expHead').value,
+        desc: document.getElementById('expDesc').value,
+        vendor: document.getElementById('expVendor').value,
+        mode: document.getElementById('expMode').value,
+        amount: document.getElementById('expAmount').value
+      };
+
+      google.script.run.withSuccessHandler(data => {
+        document.getElementById('expenseForm').reset();
+        document.getElementById('expDate').valueAsDate = new Date();
+        onDataLoaded(data);
+      }).addExpense(payload);
+    }
+
+    function openSiteModal() {
+      document.getElementById('siteModal').classList.remove('hidden');
+      document.getElementById('siteModal').classList.add('flex');
+    }
+
+    function closeSiteModal() {
+      document.getElementById('siteModal').classList.add('hidden');
+      document.getElementById('siteModal').classList.remove('flex');
+    }
+
+    function saveNewSite() {
+      const name = document.getElementById('newSiteInput').value.trim();
+      if (!name) return;
+      closeSiteModal();
+      document.getElementById('loaderOverlay').classList.remove('hidden');
+      document.getElementById('newSiteInput').value = '';
+
+      google.script.run.withSuccessHandler(onDataLoaded).addNewSite(name);
+    }
+
+    function scrollToForm() {
+      document.getElementById('expenseFormCard').scrollIntoView({ behavior: 'smooth' });
+    }
+  </script>
+</body>
+</html>
